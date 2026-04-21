@@ -126,7 +126,12 @@ func (server *Server) writeServiceError(writer http.ResponseWriter, err error) {
 
 func (server *Server) withCORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		writer.Header().Set("Access-Control-Allow-Origin", server.allowedOrigin)
+		allowedOrigin := strings.TrimSpace(server.allowedOrigin)
+		if allowedOrigin == "" {
+			allowedOrigin = "*"
+		}
+
+		writer.Header().Set("Access-Control-Allow-Origin", allowedOrigin)
 		writer.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
 		writer.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 		if request.Method == http.MethodOptions {

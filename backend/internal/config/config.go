@@ -14,7 +14,7 @@ func Load() Config {
 		Address:          envOrDefault("KUBE_GRAPH_ADDRESS", ":8999"),
 		DefaultNamespace: envOrDefault("KUBE_GRAPH_DEFAULT_NAMESPACE", "default"),
 		Kubeconfig:       os.Getenv("KUBECONFIG"),
-		AllowedOrigin:    envOrDefault("KUBE_GRAPH_ALLOWED_ORIGIN", "http://localhost:5173"),
+		AllowedOrigin:    envOrDefault("KUBE_GRAPH_ALLOWED_ORIGIN", "*"),
 	}
 }
 

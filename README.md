@@ -19,6 +19,8 @@ go run ./cmd/kube-graph-api
 
 默认监听地址为 `:8999`，可用环境变量见 `backend/.env.example`。
 
+默认通过 `KUBE_GRAPH_ADDRESS=:8999` 监听所有网卡，并通过 `KUBE_GRAPH_ALLOWED_ORIGIN=*` 允许来自 IP 地址的前端访问。
+
 ## 前端启动
 
 ```powershell
@@ -28,6 +30,8 @@ npm run dev
 ```
 
 开发环境默认通过 Vite 代理将 `/api` 转发到 `http://localhost:8999`，可用环境变量见 `frontend/.env.example`。
+
+`Vite` 开发服务器默认绑定 `0.0.0.0`，因此可以通过 `http://<你的机器IP>:5173` 从局域网内其他设备访问；如果前后端不在同一台机器上，可设置 `VITE_API_BASE_URL=http://<服务IP>:8999`。
 
 ## 主要接口
 
