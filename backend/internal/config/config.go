@@ -11,7 +11,7 @@ type Config struct {
 
 func Load() Config {
 	return Config{
-		Address:          envOrDefault("KUBE_GRAPH_ADDRESS", ":8080"),
+		Address:          envOrDefault("KUBE_GRAPH_ADDRESS", ":8999"),
 		DefaultNamespace: envOrDefault("KUBE_GRAPH_DEFAULT_NAMESPACE", "default"),
 		Kubeconfig:       os.Getenv("KUBECONFIG"),
 		AllowedOrigin:    envOrDefault("KUBE_GRAPH_ALLOWED_ORIGIN", "http://localhost:5173"),

@@ -16,7 +16,7 @@ func main() {
 
 	client, err := kube.NewClient(appConfig.Kubeconfig)
 	if err != nil {
-		log.Fatalf("閸掓稑缂?Kubernetes 鐎广垺鍩涚粩顖氥亼鐠? %v", err)
+		log.Fatalf("创建 Kubernetes 客户端失败: %v", err)
 	}
 
 	service := graph.NewService(client)
@@ -28,8 +28,8 @@ func main() {
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
-	log.Printf("kube-graph 閸氬海顏崥顖氬З娴?%s", appConfig.Address)
+	log.Printf("kube-graph 服务监听于 %s", appConfig.Address)
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		log.Fatalf("HTTP 閺堝秴濮熼崥顖氬З婢惰精瑙? %v", err)
+		log.Fatalf("HTTP 服务启动失败: %v", err)
 	}
 }
