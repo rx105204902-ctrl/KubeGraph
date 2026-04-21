@@ -55,6 +55,65 @@ export type SearchResponse = {
   items: GraphNode[];
 };
 
+export type GraphLayoutMode = "force" | "hierarchical" | "circular";
+
+export type ThemeMode = "light" | "dark";
+
+export type GraphLogLevel = "info" | "warn" | "error";
+
+export type GraphLogScope = "fetch" | "graph" | "layout" | "path" | "ui";
+
+export type GraphAnomalyKind = "duplicate-node" | "duplicate-edge" | "dangling-edge";
+
+export type GraphAnomaly = {
+  id: string;
+  kind: GraphAnomalyKind;
+  severity: "warning" | "error";
+  message: string;
+  relatedId?: string;
+};
+
+export type GraphLogEntry = {
+  id: string;
+  level: GraphLogLevel;
+  scope: GraphLogScope;
+  message: string;
+  timestamp: number;
+  context?: Record<string, string | number | boolean | null>;
+};
+
+export type GraphPerformanceSnapshot = {
+  normalizationMs: number;
+  lastLayoutMs: number | null;
+  fps: number | null;
+  renderNodeCount: number;
+  renderEdgeCount: number;
+  hiddenNodeCount: number;
+  hiddenEdgeCount: number;
+  anomalyCount: number;
+};
+
+export type GraphPathResult = {
+  startId: string;
+  endId: string;
+  nodeIds: string[];
+  edgeIds: string[];
+  found: boolean;
+};
+
+export type GraphExpansionRecord = {
+  originNodeId: string;
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+  fetchedAt: number;
+};
+
+export const GRAPH_LAYOUT_OPTIONS: Array<{ value: GraphLayoutMode; label: string }> = [
+  { value: "force", label: "Force" },
+  { value: "hierarchical", label: "Hierarchical" },
+  { value: "circular", label: "Circular" }
+];
+
 export const SUPPORTED_KINDS = [
   "",
   "Ingress",

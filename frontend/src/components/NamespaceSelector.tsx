@@ -10,7 +10,14 @@ type NamespaceSelectorProps = {
 export function NamespaceSelector({ namespaces, selectedNamespace, loading, onChange }: NamespaceSelectorProps) {
   return (
     <div className="panel-card">
-      <div className="panel-title">Namespace</div>
+      <div className="panel-header">
+        <div>
+          <div className="panel-title">Namespace</div>
+          <p className="panel-description">Scope graph exploration to one Kubernetes namespace.</p>
+        </div>
+        <span className="info-chip">{namespaces.length}</span>
+      </div>
+
       <select
         className="app-select"
         value={selectedNamespace}
@@ -23,6 +30,8 @@ export function NamespaceSelector({ namespaces, selectedNamespace, loading, onCh
           </option>
         ))}
       </select>
+
+      {loading ? <div className="field-hint">Loading namespaces…</div> : null}
     </div>
   );
 }
