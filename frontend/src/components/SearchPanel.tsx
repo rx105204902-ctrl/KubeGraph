@@ -1,5 +1,6 @@
 import type { GraphNode } from "../types";
 import { SUPPORTED_KINDS } from "../types";
+import { useI18n } from "../i18n";
 
 type SearchPanelProps = {
   query: string;
@@ -22,21 +23,22 @@ export function SearchPanel({
   onSearch,
   onSelect
 }: SearchPanelProps) {
+  const { t } = useI18n();
   const hasResults = results.length > 0;
 
   return (
     <div className="panel-card search-panel">
       <div className="panel-header">
         <div>
-          <div className="panel-title">Resource search</div>
-          <p className="panel-description">Find an entrypoint resource, then open its neighborhood graph.</p>
+          <div className="panel-title">{t("searchPanel.title")}</div>
+          <p className="panel-description">{t("searchPanel.description")}</p>
         </div>
         {hasResults ? <span className="info-chip">{results.length}</span> : null}
       </div>
 
       <input
         className="app-input"
-        placeholder="Search by kind or resource name"
+        placeholder={t("searchPanel.placeholder")}
         value={query}
         onChange={(event) => onQueryChange(event.target.value)}
         onKeyDown={(event) => {
@@ -49,13 +51,13 @@ export function SearchPanel({
       <select className="app-select" value={kind} onChange={(event) => onKindChange(event.target.value)}>
         {SUPPORTED_KINDS.map((kindOption) => (
           <option key={kindOption || "all"} value={kindOption}>
-            {kindOption || "All kinds"}
+            {kindOption || t("searchPanel.allKinds")}
           </option>
         ))}
       </select>
 
       <button className="app-button" onClick={onSearch} disabled={loading}>
-        {loading ? "Searching…" : "Search resources"}
+        {loading ? t("searchPanel.searching") : t("searchPanel.searchResources")}
       </button>
 
       <div className="search-results">
@@ -65,10 +67,10 @@ export function SearchPanel({
               <span className="result-item__kind">{node.kind}</span>
               <strong>{node.name}</strong>
             </div>
-            <span className="result-item__namespace">{node.namespace || "cluster"}</span>
+            <span className="result-item__namespace">{node.namespace || t("common.cluster")}</span>
           </button>
         ))}
-        {!loading && !hasResults ? <div className="empty-hint">Search for a resource to start graph exploration.</div> : null}
+        {!loading && !hasResults ? <div className="empty-hint">{t("searchPanel.empty")}</div> : null}
       </div>
     </div>
   );

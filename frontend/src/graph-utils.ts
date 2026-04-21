@@ -9,11 +9,18 @@ import type {
 
 export const LARGE_GRAPH_NODE_THRESHOLD = 80;
 
+type TranslateFn = (key: string, values?: Record<string, string | number | boolean | null | undefined>) => string;
+
+function getTranslatedMessage(translate: TranslateFn | undefined, key: string, fallback: string, values?: Record<string, string | number>) {
+  const translated = translate?.(key, values);
+  return translated && translated !== key ? translated : fallback;
+}
+
 export function mergeUniqueById<T extends { id: string }>(items: T[]): T[] {
   return Array.from(new Map(items.map((item) => [item.id, item])).values());
 }
 
-export function normalizeGraphData(nodes: GraphNode[], edges: GraphEdge[]) {
+export function normalizeGraphData(nodes: GraphNode[], edges: GraphEdge[], translate?: TranslateFn) {
   const startedAt = performance.now();
   const anomalies: GraphAnomaly[] = [];
   const nodeMap = new Map<string, GraphNode>();
@@ -25,7 +32,12 @@ export function normalizeGraphData(nodes: GraphNode[], edges: GraphEdge[]) {
         id: `duplicate-node-${node.id}`,
         kind: "duplicate-node",
         severity: "warning",
-        message: `Node ${node.id} was duplicated and has been merged.`,
+        message: getTranslatedMessage(
+          translate,
+          "anomalies.duplicateNode",
+          `Node ${node.id} was duplicated and has been merged.`,
+          { id: node.id }
+        ),
         relatedId: node.id
       });
     }
@@ -38,7 +50,12 @@ export function normalizeGraphData(nodes: GraphNode[], edges: GraphEdge[]) {
         id: `duplicate-edge-${edge.id}`,
         kind: "duplicate-edge",
         severity: "warning",
-        message: `Edge ${edge.id} was duplicated and has been merged.`,
+        message: getTranslatedMessage(
+          translate,
+          "anomalies.duplicateEdge",
+          `Edge ${edge.id} was duplicated and has been merged.`,
+          { id: edge.id }
+        ),
         relatedId: edge.id
       });
     }
@@ -52,7 +69,12 @@ export function normalizeGraphData(nodes: GraphNode[], edges: GraphEdge[]) {
         id: `dangling-edge-${edge.id}`,
         kind: "dangling-edge",
         severity: "error",
-        message: `Edge ${edge.id} references missing nodes and has been ignored.`,
+        message: getTranslatedMessage(
+          translate,
+          "anomalies.danglingEdge",
+          `Edge ${edge.id} references missing nodes and has been ignored.`,
+          { id: edge.id }
+        ),
         relatedId: edge.id
       });
       return;
@@ -89,22 +111,13 @@ export function describeEdge(edge: GraphEdge) {
   return `${edge.type}: ${edge.reason}`;
 }
 
-export function createFriendlyError(scope: "namespace" | "search" | "graph" | "detail" | "manifest", message: string) {
-  const fallback = message.trim() || "Unknown error";
-  switch (scope) {
-    case "namespace":
-      return `Unable to load namespaces right now. ${fallback}`;
-    case "search":
-      return `Resource search failed. ${fallback}`;
-    case "graph":
-      return `The graph could not be rendered. ${fallback}`;
-    case "detail":
-      return `Resource details are temporarily unavailable. ${fallback}`;
-    case "manifest":
-      return `Manifest loading failed. ${fallback}`;
-    default:
-      return fallback;
-  }
+export function createFriendlyError(
+  scope: "namespace" | "search" | "graph" | "detail" | "manifest",
+  message: string,
+  translate?: TranslateFn
+) {
+  const fallback = message.trim() || getTranslatedMessage(translate, "errors.unknown", "Unknown error");
+  return getTranslatedMessage(translate, `errors.${scope}`, fallback, { message: fallback });
 }
 
 export function buildLogContext(context?: Record<string, unknown>) {

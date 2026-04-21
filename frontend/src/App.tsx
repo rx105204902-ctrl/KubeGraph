@@ -16,6 +16,7 @@ import { GraphCanvas } from "./components/GraphCanvas";
 import { GraphToolbar } from "./components/GraphToolbar";
 import { NamespaceSelector } from "./components/NamespaceSelector";
 import { SearchPanel } from "./components/SearchPanel";
+import { useI18n } from "./i18n";
 import type {
   GraphEdge,
   GraphExpansionRecord,
@@ -35,10 +36,15 @@ import { SUPPORTED_EDGE_TYPES } from "./types";
 
 const defaultNamespaceFromEnv = import.meta.env.VITE_DEFAULT_NAMESPACE ?? "default";
 
+type FriendlyErrorScope = "namespace" | "search" | "graph" | "detail" | "manifest";
+
+type NoticeValues = Record<string, string | number | boolean | null | undefined>;
+
 type Notice = {
   tone: "info" | "success" | "warning" | "error";
-  title: string;
-  description: string;
+  titleKey: string;
+  descriptionKey: string;
+  values?: NoticeValues;
 };
 
 type GraphDataState = {
@@ -73,7 +79,7 @@ type InteractionState = {
 type PanelState = {
   nodeDetail: NodeDetail | null;
   manifest: ManifestPayload | null;
-  graphError: string | null;
+  graphError: { scope: FriendlyErrorScope; message: string } | null;
   notice: Notice | null;
 };
 
@@ -121,6 +127,7 @@ function createLogEntry(
 }
 
 export default function App() {
+  const { t } = useI18n();
   const [graphDataState, setGraphDataState] = useState<GraphDataState>({
     namespaces: [],
     searchResults: [],
@@ -162,6 +169,15 @@ export default function App() {
   const [metrics, setMetrics] = useState<GraphPerformanceSnapshot>(initialMetrics);
   const [pathResult, setPathResult] = useState<GraphPathResult | null>(null);
   const lastAnomalySignatureRef = useRef("");
+  const tRef = useRef(t);
+
+  useEffect(() => {
+    tRef.current = t;
+  }, [t]);
+
+  const getFriendlyError = useCallback((scope: FriendlyErrorScope, message: string) => {
+    return createFriendlyError(scope, message, tRef.current);
+  }, []);
 
   const appendLog = useCallback(
     (level: GraphLogLevel, scope: GraphLogScope, message: string, context?: Record<string, unknown>) => {
@@ -192,7 +208,7 @@ export default function App() {
     [graphDataState.baseGraph.edges, graphDataState.expansions]
   );
 
-  const normalizedGraph = useMemo(() => normalizeGraphData(rawGraphNodes, rawGraphEdges), [rawGraphEdges, rawGraphNodes]);
+  const normalizedGraph = useMemo(() => normalizeGraphData(rawGraphNodes, rawGraphEdges, t), [rawGraphEdges, rawGraphNodes, t]);
   const selectedNode = useMemo(
     () => normalizedGraph.nodes.find((node) => node.id === interactionState.selectedNodeId) ?? null,
     [interactionState.selectedNodeId, normalizedGraph.nodes]
@@ -305,7 +321,7 @@ export default function App() {
   useEffect(() => {
     const anomalySignature = normalizedGraph.anomalies.map((item) => item.id).join("|");
     if (anomalySignature !== "" && anomalySignature !== lastAnomalySignatureRef.current) {
-      appendLog("warn", "graph", "Graph normalization skipped invalid or duplicate elements.", {
+      appendLog("warn", "graph", tRef.current("logs.normalizationSkipped"), {
         anomalies: normalizedGraph.anomalies.length
       });
       lastAnomalySignatureRef.current = anomalySignature;
@@ -315,7 +331,7 @@ export default function App() {
   useEffect(() => {
     let cancelled = false;
     setLoadingState((current) => ({ ...current, namespaces: true }));
-    appendLog("info", "fetch", "Loading namespaces.");
+    appendLog("info", "fetch", tRef.current("logs.loadingNamespaces"));
 
     fetchNamespaces()
       .then((response) => {
@@ -336,12 +352,18 @@ export default function App() {
           return;
         }
 
-        const message = createFriendlyError("namespace", requestError.message);
         setPanelState((current) => ({
           ...current,
-          notice: { tone: "error", title: "Namespaces unavailable", description: message }
+          notice: {
+            tone: "error",
+            titleKey: "notices.namespacesUnavailableTitle",
+            descriptionKey: "errors.namespace",
+            values: {
+              message: requestError.message.trim() || tRef.current("errors.unknown")
+            }
+          }
         }));
-        appendLog("error", "fetch", "Namespace request failed.", { message: requestError.message });
+        appendLog("error", "fetch", tRef.current("logs.namespaceRequestFailed"), { message: requestError.message });
       })
       .finally(() => {
         if (!cancelled) {
@@ -391,7 +413,7 @@ export default function App() {
 
     let cancelled = false;
     setLoadingState((current) => ({ ...current, detail: true }));
-    appendLog("info", "fetch", "Loading node details.", { nodeId: selectedNode.id });
+    appendLog("info", "fetch", tRef.current("logs.loadingNodeDetails"), { nodeId: selectedNode.id });
 
     fetchNodeDetail(selectedNode.kind, selectedNode.name, selectedNode.namespace)
       .then((response) => {
@@ -408,11 +430,17 @@ export default function App() {
           ...current,
           notice: {
             tone: "warning",
-            title: "Details unavailable",
-            description: createFriendlyError("detail", requestError.message)
+            titleKey: "notices.detailsUnavailableTitle",
+            descriptionKey: "errors.detail",
+            values: {
+              message: requestError.message.trim() || tRef.current("errors.unknown")
+            }
           }
         }));
-        appendLog("error", "fetch", "Detail request failed.", { nodeId: selectedNode.id, message: requestError.message });
+        appendLog("error", "fetch", tRef.current("logs.detailRequestFailed"), {
+          nodeId: selectedNode.id,
+          message: requestError.message
+        });
       })
       .finally(() => {
         if (!cancelled) {
@@ -451,7 +479,7 @@ export default function App() {
     async (node: GraphNode, reset: boolean) => {
       setLoadingState((current) => ({ ...current, graph: true }));
       setPanelState((current) => ({ ...current, graphError: null, notice: null, manifest: null }));
-      appendLog("info", "fetch", reset ? "Loading graph root." : "Expanding graph neighbors.", {
+      appendLog("info", "fetch", tRef.current(reset ? "logs.loadingGraphRoot" : "logs.expandingGraphNeighbors"), {
         nodeId: node.id,
         reset,
         namespace: interactionState.selectedNamespace
@@ -491,16 +519,21 @@ export default function App() {
           pathEndId: reset ? null : current.pathEndId
         }));
         setPathResult(null);
-        appendLog("info", "graph", "Graph data ready.", {
+        appendLog("info", "graph", tRef.current("logs.graphDataReady"), {
           nodeId: node.id,
           nodes: payload.nodes.length,
           edges: payload.edges.length,
           reset
         });
       } catch (requestError) {
-        const message = createFriendlyError("graph", (requestError as Error).message);
-        setPanelState((current) => ({ ...current, graphError: message }));
-        appendLog("error", "fetch", "Graph request failed.", { nodeId: node.id, message: (requestError as Error).message });
+        setPanelState((current) => ({
+          ...current,
+          graphError: { scope: "graph", message: (requestError as Error).message }
+        }));
+        appendLog("error", "fetch", tRef.current("logs.graphRequestFailed"), {
+          nodeId: node.id,
+          message: (requestError as Error).message
+        });
       } finally {
         setLoadingState((current) => ({ ...current, graph: false }));
       }
@@ -515,7 +548,7 @@ export default function App() {
 
     setLoadingState((current) => ({ ...current, search: true }));
     setPanelState((current) => ({ ...current, notice: null }));
-    appendLog("info", "fetch", "Searching resources.", {
+    appendLog("info", "fetch", tRef.current("logs.searchingResources"), {
       query: interactionState.query,
       kind: interactionState.kind || "all",
       namespace: interactionState.selectedNamespace
@@ -532,18 +565,24 @@ export default function App() {
           ...current,
           notice: {
             tone: "info",
-            title: "No resources found",
-            description: "Try a broader query or switch to another namespace."
+            titleKey: "notices.noResourcesFoundTitle",
+            descriptionKey: "notices.noResourcesFoundDescription"
           }
         }));
       }
     } catch (requestError) {
-      const message = createFriendlyError("search", (requestError as Error).message);
       setPanelState((current) => ({
         ...current,
-        notice: { tone: "error", title: "Search failed", description: message }
+        notice: {
+          tone: "error",
+          titleKey: "notices.searchFailedTitle",
+          descriptionKey: "errors.search",
+          values: {
+            message: (requestError as Error).message.trim() || tRef.current("errors.unknown")
+          }
+        }
       }));
-      appendLog("error", "fetch", "Search request failed.", { message: (requestError as Error).message });
+      appendLog("error", "fetch", tRef.current("logs.searchRequestFailed"), { message: (requestError as Error).message });
     } finally {
       setLoadingState((current) => ({ ...current, search: false }));
     }
@@ -567,7 +606,7 @@ export default function App() {
       showOnlyMatches: false
     }));
     resetGraphWorkspace(true);
-    appendLog("info", "ui", "Namespace changed.", { namespace });
+    appendLog("info", "ui", tRef.current("logs.namespaceChanged"), { namespace });
   }
 
   function handleNodeSelect(nodeId: string) {
@@ -610,7 +649,7 @@ export default function App() {
       return { ...current, expansions: nextExpansions };
     });
     setPathResult(null);
-    appendLog("info", "graph", "Collapsed subgraph.", { nodeId: selectedNode.id });
+    appendLog("info", "graph", tRef.current("logs.collapsedSubgraph"), { nodeId: selectedNode.id });
   }
 
   function handleExpandSelected() {
@@ -635,7 +674,7 @@ export default function App() {
     }
 
     setInteractionState((current) => ({ ...current, pathStartId: selectedNode.id }));
-    appendLog("info", "path", "Path start selected.", { nodeId: selectedNode.id });
+    appendLog("info", "path", tRef.current("logs.pathStartSelected"), { nodeId: selectedNode.id });
   }
 
   function handleSetPathEnd() {
@@ -644,7 +683,7 @@ export default function App() {
     }
 
     setInteractionState((current) => ({ ...current, pathEndId: selectedNode.id }));
-    appendLog("info", "path", "Path end selected.", { nodeId: selectedNode.id });
+    appendLog("info", "path", tRef.current("logs.pathEndSelected"), { nodeId: selectedNode.id });
   }
 
   function handleRunPathAnalysis() {
@@ -653,8 +692,8 @@ export default function App() {
         ...current,
         notice: {
           tone: "warning",
-          title: "Select two nodes first",
-          description: "Choose both a path start and a path end before running shortest path analysis."
+          titleKey: "notices.selectTwoNodesTitle",
+          descriptionKey: "notices.selectTwoNodesDescription"
         }
       }));
       return;
@@ -667,16 +706,17 @@ export default function App() {
       notice: result.found
         ? {
             tone: "success",
-            title: "Path highlighted",
-            description: `Found a path with ${result.edgeIds.length} hops between the selected resources.`
+            titleKey: "notices.pathHighlightedTitle",
+            descriptionKey: "notices.pathHighlightedDescription",
+            values: { hops: result.edgeIds.length }
           }
         : {
             tone: "warning",
-            title: "No path found",
-            description: "The current graph does not contain a path between the selected resources. Expand the graph or relax filters and try again."
+            titleKey: "notices.noPathFoundTitle",
+            descriptionKey: "notices.noPathFoundDescription"
           }
     }));
-    appendLog("info", "path", result.found ? "Shortest path highlighted." : "No path found.", {
+    appendLog("info", "path", tRef.current(result.found ? "logs.shortestPathHighlighted" : "logs.noPathFound"), {
       startId: interactionState.pathStartId,
       endId: interactionState.pathEndId,
       found: result.found,
@@ -696,7 +736,7 @@ export default function App() {
     }
 
     setLoadingState((current) => ({ ...current, manifest: true }));
-    appendLog("info", "fetch", "Loading manifest.", { nodeId: node.id });
+    appendLog("info", "fetch", tRef.current("logs.loadingManifest"), { nodeId: node.id });
     try {
       const response = await fetchManifest(node.kind, node.name, node.namespace);
       setPanelState((current) => ({ ...current, manifest: response }));
@@ -705,58 +745,74 @@ export default function App() {
         ...current,
         notice: {
           tone: "warning",
-          title: "Manifest unavailable",
-          description: createFriendlyError("manifest", (requestError as Error).message)
+          titleKey: "notices.manifestUnavailableTitle",
+          descriptionKey: "errors.manifest",
+          values: {
+            message: (requestError as Error).message.trim() || tRef.current("errors.unknown")
+          }
         }
       }));
-      appendLog("error", "fetch", "Manifest request failed.", { nodeId: node.id, message: (requestError as Error).message });
+      appendLog("error", "fetch", tRef.current("logs.manifestRequestFailed"), {
+        nodeId: node.id,
+        message: (requestError as Error).message
+      });
     } finally {
       setLoadingState((current) => ({ ...current, manifest: false }));
     }
   }
 
-  const notice = panelState.notice;
+  const notice = panelState.notice
+    ? {
+        tone: panelState.notice.tone,
+        title: t(panelState.notice.titleKey, panelState.notice.values),
+        description: t(panelState.notice.descriptionKey, panelState.notice.values)
+      }
+    : null;
   const pathStartLabel = pathStartNode ? describeNode(pathStartNode) : null;
   const pathEndLabel = pathEndNode ? describeNode(pathEndNode) : null;
   const graphEmptyState = useMemo(() => {
     if (panelState.graphError) {
-      return { title: "Graph unavailable", description: panelState.graphError };
+      return {
+        title: t("graphCanvas.unavailableTitle"),
+        description: createFriendlyError(panelState.graphError.scope, panelState.graphError.message, t)
+      };
     }
     if (graphDataState.rootNodeId === null) {
       return {
-        title: "Start from a resource",
-        description: "Search for a resource in the selected namespace and open it to build the graph."
+        title: t("graphEmpty.startTitle"),
+        description: t("graphEmpty.startDescription")
       };
     }
     if (interactionState.showOnlyMatches && interactionState.graphFilterQuery.trim() !== "" && visibleGraph.nodes.length === 0) {
       return {
-        title: "No visible matches",
-        description: "Relax the graph filter or turn off “Only show matches” to reveal more of the graph."
+        title: t("graphEmpty.noVisibleMatchesTitle"),
+        description: t("graphEmpty.noVisibleMatchesDescription")
       };
     }
     return {
-      title: "No graph data",
-      description: "Expand another node or adjust filters to continue exploring the graph."
+      title: t("graphEmpty.noDataTitle"),
+      description: t("graphEmpty.noDataDescription")
     };
   }, [
     graphDataState.rootNodeId,
     interactionState.graphFilterQuery,
     interactionState.showOnlyMatches,
     panelState.graphError,
-    visibleGraph.nodes.length
+    visibleGraph.nodes.length,
+    t
   ]);
 
   return (
     <div className={`app-shell theme-${interactionState.themeMode}`}>
       <header className="app-header">
         <div>
-          <h1>kube-graph</h1>
-          <p>Stable namespace-scoped Kubernetes graph exploration with diagnostics, path analysis and responsive workspace controls.</p>
+          <h1>{t("header.title")}</h1>
+          <p>{t("header.subtitle")}</p>
         </div>
         <div className="header-stats">
-          <span className="info-chip">{normalizedGraph.nodes.length} total nodes</span>
-          <span className="info-chip">{normalizedGraph.edges.length} total edges</span>
-          <span className="info-chip">{Object.keys(graphDataState.expansions).length} expanded subgraphs</span>
+          <span className="info-chip">{t("header.totalNodes", { count: normalizedGraph.nodes.length })}</span>
+          <span className="info-chip">{t("header.totalEdges", { count: normalizedGraph.edges.length })}</span>
+          <span className="info-chip">{t("header.expandedSubgraphs", { count: Object.keys(graphDataState.expansions).length })}</span>
         </div>
       </header>
 
@@ -767,7 +823,7 @@ export default function App() {
             <p>{notice.description}</p>
           </div>
           <button className="text-button" onClick={() => setPanelState((current) => ({ ...current, notice: null }))}>
-            Dismiss
+            {t("common.dismiss")}
           </button>
         </div>
       ) : null}
@@ -835,8 +891,8 @@ export default function App() {
           <div className="panel-card graph-panel">
             <div className="panel-header">
               <div>
-                <div className="panel-title">Resource graph</div>
-                <p className="panel-description">Use layout switching, filters, path analysis and debug mode to inspect graph stability.</p>
+                <div className="panel-title">{t("graphPanel.title")}</div>
+                <p className="panel-description">{t("graphPanel.description")}</p>
               </div>
             </div>
 
@@ -849,7 +905,7 @@ export default function App() {
               themeMode={interactionState.themeMode}
               debugMode={interactionState.debugMode}
               loading={loadingState.graph}
-              errorMessage={panelState.graphError}
+              errorMessage={panelState.graphError ? getFriendlyError(panelState.graphError.scope, panelState.graphError.message) : null}
               emptyTitle={graphEmptyState.title}
               emptyDescription={graphEmptyState.description}
               matchedNodeIds={matchedNodeIds}

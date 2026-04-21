@@ -57,6 +57,8 @@ export type SearchResponse = {
 
 export type GraphLayoutMode = "force" | "hierarchical" | "circular";
 
+export type LanguageCode = "en" | "zh-CN";
+
 export type ThemeMode = "light" | "dark";
 
 export type GraphLogLevel = "info" | "warn" | "error";
@@ -108,11 +110,7 @@ export type GraphExpansionRecord = {
   fetchedAt: number;
 };
 
-export const GRAPH_LAYOUT_OPTIONS: Array<{ value: GraphLayoutMode; label: string }> = [
-  { value: "force", label: "Force" },
-  { value: "hierarchical", label: "Hierarchical" },
-  { value: "circular", label: "Circular" }
-];
+export const GRAPH_LAYOUT_OPTIONS: GraphLayoutMode[] = ["force", "hierarchical", "circular"];
 
 export const SUPPORTED_KINDS = [
   "",

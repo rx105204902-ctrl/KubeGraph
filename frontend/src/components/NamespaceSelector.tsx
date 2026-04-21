@@ -1,4 +1,5 @@
 import type { NamespaceOption } from "../types";
+import { useI18n } from "../i18n";
 
 type NamespaceSelectorProps = {
   namespaces: NamespaceOption[];
@@ -8,12 +9,14 @@ type NamespaceSelectorProps = {
 };
 
 export function NamespaceSelector({ namespaces, selectedNamespace, loading, onChange }: NamespaceSelectorProps) {
+  const { t } = useI18n();
+
   return (
     <div className="panel-card">
       <div className="panel-header">
         <div>
-          <div className="panel-title">Namespace</div>
-          <p className="panel-description">Scope graph exploration to one Kubernetes namespace.</p>
+          <div className="panel-title">{t("namespacePanel.title")}</div>
+          <p className="panel-description">{t("namespacePanel.description")}</p>
         </div>
         <span className="info-chip">{namespaces.length}</span>
       </div>
@@ -31,7 +34,7 @@ export function NamespaceSelector({ namespaces, selectedNamespace, loading, onCh
         ))}
       </select>
 
-      {loading ? <div className="field-hint">Loading namespaces…</div> : null}
+      {loading ? <div className="field-hint">{t("namespacePanel.loading")}</div> : null}
     </div>
   );
 }

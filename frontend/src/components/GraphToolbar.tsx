@@ -1,5 +1,6 @@
 import type { GraphLayoutMode, GraphNode, ThemeMode } from "../types";
 import { GRAPH_LAYOUT_OPTIONS } from "../types";
+import { useI18n } from "../i18n";
 
 type GraphToolbarProps = {
   layoutMode: GraphLayoutMode;
@@ -52,6 +53,7 @@ export function GraphToolbar({
   onRunPathAnalysis,
   onClearPath
 }: GraphToolbarProps) {
+  const { language, t, toggleLanguage } = useI18n();
   const canRunPathAnalysis = Boolean(pathStartLabel && pathEndLabel);
 
   return (
@@ -59,10 +61,10 @@ export function GraphToolbar({
       <div className="toolbar-row">
         <div className="toolbar-block toolbar-block--grow">
           <label className="toolbar-field toolbar-field--wide">
-            <span>Graph filter</span>
+            <span>{t("toolbar.graphFilter")}</span>
             <input
               className="app-input"
-              placeholder="Highlight nodes by name, kind, namespace or ID"
+              placeholder={t("toolbar.graphFilterPlaceholder")}
               value={filterQuery}
               onChange={(event) => onFilterQueryChange(event.target.value)}
             />
@@ -73,45 +75,48 @@ export function GraphToolbar({
               checked={showOnlyMatches}
               onChange={(event) => onShowOnlyMatchesChange(event.target.checked)}
             />
-            <span>Only show matches</span>
+            <span>{t("toolbar.onlyShowMatches")}</span>
           </label>
         </div>
 
         <div className="toolbar-block">
           <label className="toolbar-field">
-            <span>Layout</span>
+            <span>{t("toolbar.layout")}</span>
             <select
               className="app-select"
               value={layoutMode}
               onChange={(event) => onLayoutModeChange(event.target.value as GraphLayoutMode)}
             >
               {GRAPH_LAYOUT_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
+                <option key={option} value={option}>
+                  {t(`toolbar.layoutOptions.${option}`)}
                 </option>
               ))}
             </select>
           </label>
           <button className="app-button secondary" onClick={onFitView}>
-            Fit view
+            {t("toolbar.fitView")}
           </button>
         </div>
       </div>
 
       <div className="toolbar-row toolbar-row--compact">
         <div className="toolbar-chip-row">
-          <span className="info-chip">{visibleNodeCount} nodes</span>
-          <span className="info-chip">{visibleEdgeCount} edges</span>
-          {pathStartLabel ? <span className="info-chip info-chip--accent">Start: {pathStartLabel}</span> : null}
-          {pathEndLabel ? <span className="info-chip info-chip--accent">End: {pathEndLabel}</span> : null}
+          <span className="info-chip">{t("toolbar.visibleNodes", { count: visibleNodeCount })}</span>
+          <span className="info-chip">{t("toolbar.visibleEdges", { count: visibleEdgeCount })}</span>
+          {pathStartLabel ? <span className="info-chip info-chip--accent">{t("toolbar.start", { label: pathStartLabel })}</span> : null}
+          {pathEndLabel ? <span className="info-chip info-chip--accent">{t("toolbar.end", { label: pathEndLabel })}</span> : null}
         </div>
 
         <div className="toolbar-actions">
           <button className="app-button ghost" onClick={onThemeToggle}>
-            {themeMode === "dark" ? "Light mode" : "Dark mode"}
+            {themeMode === "dark" ? t("toolbar.lightMode") : t("toolbar.darkMode")}
+          </button>
+          <button className="app-button ghost" onClick={toggleLanguage}>
+            {language === "zh-CN" ? t("toolbar.switchToEnglish") : t("toolbar.switchToChinese")}
           </button>
           <button className={`app-button ghost ${debugMode ? "active" : ""}`} onClick={onDebugToggle}>
-            {debugMode ? "Hide debug" : "Show debug"}
+            {debugMode ? t("toolbar.hideDebug") : t("toolbar.showDebug")}
           </button>
         </div>
       </div>
@@ -125,24 +130,24 @@ export function GraphToolbar({
           <div className="toolbar-actions toolbar-actions--wrap">
             {isSelectedNodeExpanded ? (
               <button className="app-button secondary" onClick={onCollapseSelected}>
-                Collapse subgraph
+                {t("toolbar.collapseSubgraph")}
               </button>
             ) : (
               <button className="app-button" onClick={onExpandSelected}>
-                Expand neighbors
+                {t("toolbar.expandNeighbors")}
               </button>
             )}
             <button className="app-button ghost" onClick={onSetPathStart}>
-              Set path start
+              {t("toolbar.setPathStart")}
             </button>
             <button className="app-button ghost" onClick={onSetPathEnd}>
-              Set path end
+              {t("toolbar.setPathEnd")}
             </button>
             <button className="app-button ghost" onClick={onRunPathAnalysis} disabled={!canRunPathAnalysis}>
-              Highlight shortest path
+              {t("toolbar.highlightShortestPath")}
             </button>
             <button className="app-button ghost" onClick={onClearPath}>
-              Clear path
+              {t("toolbar.clearPath")}
             </button>
           </div>
         </div>

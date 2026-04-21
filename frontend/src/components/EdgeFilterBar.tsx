@@ -1,4 +1,5 @@
 import { SUPPORTED_EDGE_TYPES } from "../types";
+import { useI18n } from "../i18n";
 
 type EdgeFilterBarProps = {
   activeEdgeTypes: string[];
@@ -8,19 +9,21 @@ type EdgeFilterBarProps = {
 };
 
 export function EdgeFilterBar({ activeEdgeTypes, onToggle, onEnableAll, onClearAll }: EdgeFilterBarProps) {
+  const { t } = useI18n();
+
   return (
     <div className="panel-card">
       <div className="panel-header">
         <div>
-          <div className="panel-title">Relationship filters</div>
-          <p className="panel-description">Focus the graph on selected edge categories.</p>
+          <div className="panel-title">{t("edgeFilters.title")}</div>
+          <p className="panel-description">{t("edgeFilters.description")}</p>
         </div>
         <div className="panel-actions">
           <button className="text-button" onClick={onEnableAll}>
-            All
+            {t("common.all")}
           </button>
           <button className="text-button" onClick={onClearAll}>
-            Clear
+            {t("common.clear")}
           </button>
         </div>
       </div>
@@ -33,7 +36,7 @@ export function EdgeFilterBar({ activeEdgeTypes, onToggle, onEnableAll, onClearA
               checked={activeEdgeTypes.includes(edgeType)}
               onChange={() => onToggle(edgeType)}
             />
-            <span>{edgeType}</span>
+            <span>{t(`edgeTypes.${edgeType}`)}</span>
           </label>
         ))}
       </div>

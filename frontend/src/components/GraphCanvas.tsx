@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import cytoscape, { type Core, type ElementDefinition } from "cytoscape";
 import { LARGE_GRAPH_NODE_THRESHOLD, describeEdge, describeNode } from "../graph-utils";
+import { useI18n } from "../i18n";
 import type {
   GraphEdge,
   GraphLayoutMode,
@@ -76,14 +77,24 @@ const edgeLineStyles: Record<string, "solid" | "dashed"> = {
   routes_to: "solid"
 };
 
-function buildElements(nodes: GraphNode[], edges: GraphEdge[], debugMode: boolean): ElementDefinition[] {
+function buildElements(
+  nodes: GraphNode[],
+  edges: GraphEdge[],
+  debugMode: boolean,
+  compactMode: boolean,
+  clusterLabel: string
+): ElementDefinition[] {
   const nodeElements: ElementDefinition[] = nodes.map((node) => ({
     data: {
       ...node,
       label: debugMode
-        ? `${node.kind}\n${node.name}\n${node.namespace ?? "cluster"}\n#${node.id}`
+        ? compactMode
+          ? `${node.kind}\n${node.name}\n#${node.id}`
+          : `${node.kind}\n${node.name}\n${node.namespace ?? clusterLabel}\n#${node.id}`
         : node.namespace
-          ? `${node.kind}\n${node.name}\n${node.namespace}`
+          ? compactMode
+            ? `${node.kind}\n${node.name}`
+            : `${node.kind}\n${node.name}\n${node.namespace}`
           : `${node.kind}\n${node.name}`,
       color: nodeColors[node.category] ?? "#334155"
     }
@@ -92,7 +103,7 @@ function buildElements(nodes: GraphNode[], edges: GraphEdge[], debugMode: boolea
   const edgeElements: ElementDefinition[] = edges.map((edge) => ({
     data: {
       ...edge,
-      label: edge.type,
+      label: compactMode ? "" : edge.type,
       color: edgeColors[edge.type] ?? "#475569",
       lineStyle: edgeLineStyles[edge.type] ?? "solid"
     }
@@ -116,6 +127,7 @@ function buildStyles(themeMode: ThemeMode) {
         "background-color": "data(color)",
         color: nodeTextColor,
         "font-size": "10px",
+        "min-zoomed-font-size": 9,
         "text-wrap": "wrap",
         "text-max-width": 110,
         "text-valign": "bottom",
@@ -132,6 +144,7 @@ function buildStyles(themeMode: ThemeMode) {
         label: "data(label)",
         width: 2,
         "font-size": "9px",
+        "min-zoomed-font-size": 7,
         color: edgeTextColor,
         "curve-style": "bezier",
         "line-color": "data(color)",
@@ -281,13 +294,18 @@ function applyGraphState(
   }
 }
 
-function createTooltipForElement(element: cytoscape.SingularElementArgument, x: number, y: number): TooltipState {
+function createTooltipForElement(
+  element: cytoscape.SingularElementArgument,
+  x: number,
+  y: number,
+  t: (key: string, values?: Record<string, string | number>) => string
+): TooltipState {
   if (element.isNode()) {
     const data = element.data() as GraphNode;
     return {
       title: describeNode(data),
-      subtitle: `Category: ${data.category}`,
-      meta: `ID: ${data.id}`,
+      subtitle: t("graphCanvas.tooltipCategory", { category: data.category }),
+      meta: t("graphCanvas.tooltipId", { id: data.id }),
       x,
       y
     };
@@ -297,7 +315,7 @@ function createTooltipForElement(element: cytoscape.SingularElementArgument, x: 
   return {
     title: data.type,
     subtitle: describeEdge(data),
-    meta: `ID: ${data.id}`,
+    meta: t("graphCanvas.tooltipId", { id: data.id }),
     x,
     y
   };
@@ -326,12 +344,37 @@ export function GraphCanvas({
   onMetricsChange,
   onLog
 }: GraphCanvasProps) {
+  const { t } = useI18n();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const cyRef = useRef<Core | null>(null);
   const lastLayoutModeRef = useRef<GraphLayoutMode>(layoutMode);
-  const elements = useMemo(() => buildElements(nodes, edges, debugMode), [nodes, edges, debugMode]);
+  const translationRef = useRef(t);
+  const onLogRef = useRef(onLog);
+  const debugModeRef = useRef(debugMode);
+  const viewportLogStateRef = useRef({ zoom: 1, panX: 0, panY: 0, timestamp: 0 });
+  const graphIsLarge = useMemo(
+    () => nodes.length > LARGE_GRAPH_NODE_THRESHOLD || edges.length > LARGE_GRAPH_NODE_THRESHOLD * 2,
+    [edges.length, nodes.length]
+  );
+  const clusterLabel = t("common.cluster");
+  const elements = useMemo(
+    () => buildElements(nodes, edges, debugMode, graphIsLarge, clusterLabel),
+    [clusterLabel, debugMode, edges, graphIsLarge, nodes]
+  );
   const styles = useMemo(() => buildStyles(themeMode), [themeMode]);
   const [tooltip, setTooltip] = useState<TooltipState | null>(null);
+
+  useEffect(() => {
+    translationRef.current = t;
+  }, [t]);
+
+  useEffect(() => {
+    onLogRef.current = onLog;
+  }, [onLog]);
+
+  useEffect(() => {
+    debugModeRef.current = debugMode;
+  }, [debugMode]);
 
   useEffect(() => {
     if (!containerRef.current) {
@@ -342,10 +385,21 @@ export function GraphCanvas({
       container: containerRef.current,
       elements: [],
       style: styles as never,
-      minZoom: 0.2,
-      maxZoom: 2.4,
-      wheelSensitivity: 0.18
+      minZoom: 0.25,
+      maxZoom: 2.6,
+      wheelSensitivity: 0.16,
+      boxSelectionEnabled: false,
+      selectionType: "single",
+      textureOnViewport: true,
+      motionBlur: true,
+      hideEdgesOnViewport: true
     });
+
+    cy.userZoomingEnabled(true);
+    cy.userPanningEnabled(true);
+    cy.zoomingEnabled(true);
+    cy.panningEnabled(true);
+    cy.autoungrabify(false);
 
     cy.on("tap", "node", (event) => {
       onNodeSelect(event.target.id());
@@ -363,19 +417,87 @@ export function GraphCanvas({
 
     cy.on("mouseover mousemove", "node, edge", (event) => {
       const position = event.renderedPosition ?? { x: 0, y: 0 };
-      setTooltip(createTooltipForElement(event.target, position.x, position.y));
+      setTooltip(createTooltipForElement(event.target, position.x, position.y, translationRef.current));
     });
 
     cy.on("mouseout", "node, edge", () => {
       setTooltip(null);
     });
 
+    cy.on("grab", "node", (event) => {
+      setTooltip(null);
+
+      if (!debugModeRef.current) {
+        return;
+      }
+
+      onLogRef.current("info", "ui", translationRef.current("logs.nodeDragStarted"), { nodeId: event.target.id() });
+    });
+
+    cy.on("dragfree", "node", (event) => {
+      if (!debugModeRef.current) {
+        return;
+      }
+
+      const position = event.target.position();
+      onLogRef.current("info", "ui", translationRef.current("logs.nodeDragFinished"), {
+        nodeId: event.target.id(),
+        x: Math.round(position.x),
+        y: Math.round(position.y)
+      });
+    });
+
+    cy.on("zoom pan", () => {
+      setTooltip(null);
+
+      if (!debugModeRef.current) {
+        return;
+      }
+
+      const zoom = Number(cy.zoom().toFixed(2));
+      const pan = cy.pan();
+      const now = performance.now();
+      const previousViewport = viewportLogStateRef.current;
+      const hasMeaningfulChange =
+        Math.abs(previousViewport.zoom - zoom) >= 0.12 ||
+        Math.abs(previousViewport.panX - pan.x) >= 60 ||
+        Math.abs(previousViewport.panY - pan.y) >= 60 ||
+        now - previousViewport.timestamp >= 1200;
+
+      if (!hasMeaningfulChange) {
+        return;
+      }
+
+      viewportLogStateRef.current = {
+        zoom,
+        panX: pan.x,
+        panY: pan.y,
+        timestamp: now
+      };
+
+      onLogRef.current("info", "ui", translationRef.current("logs.viewportChanged"), {
+        zoom,
+        panX: Math.round(pan.x),
+        panY: Math.round(pan.y)
+      });
+    });
+
+    const resizeObserver =
+      typeof ResizeObserver === "undefined"
+        ? null
+        : new ResizeObserver(() => {
+            cy.resize();
+          });
+
+    resizeObserver?.observe(containerRef.current);
+
     cyRef.current = cy;
     return () => {
+      resizeObserver?.disconnect();
       cy.destroy();
       cyRef.current = null;
     };
-  }, [onClearSelection, onEdgeSelect, onNodeSelect, styles]);
+  }, [onClearSelection, onEdgeSelect, onNodeSelect]);
 
   useEffect(() => {
     const cy = cyRef.current;
@@ -399,9 +521,8 @@ export function GraphCanvas({
 
     syncElements(cy, elements);
 
-    const graphIsLarge = nodes.length > LARGE_GRAPH_NODE_THRESHOLD;
     if (graphIsLarge) {
-      onLog("warn", "layout", "Large graph detected; performance protection is active.", {
+      onLog("warn", "layout", t("logs.largeGraphDetected"), {
         nodeCount: nodes.length,
         edgeCount: edges.length
       });
@@ -431,21 +552,36 @@ export function GraphCanvas({
                 name: "cose",
                 fit: shouldFit,
                 animate: false,
-                padding: graphIsLarge ? 24 : 48,
-                nodeRepulsion: graphIsLarge ? 120000 : 300000,
-                idealEdgeLength: graphIsLarge ? 90 : 140,
-                numIter: graphIsLarge ? 300 : 700
+                padding: graphIsLarge ? 20 : 48,
+                nodeRepulsion: graphIsLarge ? 60000 : 300000,
+                idealEdgeLength: graphIsLarge ? 72 : 140,
+                numIter: graphIsLarge ? 220 : 700,
+                refresh: graphIsLarge ? 24 : 16,
+                randomize: false
               };
 
       const layout = cy.layout(layoutOptions as never);
+      let didRestoreViewport = false;
+      const restoreViewport = () => {
+        if (didRestoreViewport || shouldFit || cy.elements().length === 0) {
+          return;
+        }
+
+        cy.zoom(previousZoom);
+        cy.pan(previousPan);
+        didRestoreViewport = true;
+      };
+
       (layout as any).on?.("layoutstop", () => {
+        restoreViewport();
+
         const lastLayoutMs = performance.now() - layoutStartedAt;
         onMetricsChange({
           lastLayoutMs,
           renderNodeCount: nodes.length,
           renderEdgeCount: edges.length
         });
-        onLog("info", "layout", "Graph layout completed.", {
+        onLog("info", "layout", t("logs.graphLayoutCompleted"), {
           mode: layoutMode,
           nodeCount: nodes.length,
           edgeCount: edges.length,
@@ -453,12 +589,12 @@ export function GraphCanvas({
         });
       });
       layout.run();
-      if (!shouldFit && cy.elements().length > 0) {
-        cy.zoom(previousZoom);
-        cy.pan(previousPan);
+
+      if (!(layout as any).on) {
+        restoreViewport();
       }
     } catch (error) {
-      onLog("error", "layout", "Graph layout failed; falling back to a grid layout.", {
+      onLog("error", "layout", t("logs.graphLayoutFallback"), {
         mode: layoutMode,
         message: error instanceof Error ? error.message : "unknown"
       });
@@ -478,7 +614,9 @@ export function GraphCanvas({
     pathEdgeIds,
     pathNodeIds,
     selectedEdgeId,
-    selectedNodeId
+    selectedNodeId,
+    t,
+    graphIsLarge
   ]);
 
   useEffect(() => {
@@ -496,9 +634,9 @@ export function GraphCanvas({
       return;
     }
 
-    cy.fit(cy.elements(), 48);
-    onLog("info", "ui", "Graph viewport fitted to visible elements.");
-  }, [fitRequestToken, onLog]);
+    cy.fit(cy.elements(), graphIsLarge ? 28 : 48);
+    onLog("info", "ui", t("logs.viewportFitted"));
+  }, [fitRequestToken, graphIsLarge, onLog, t]);
 
   useEffect(() => {
     if (!debugMode) {
@@ -542,25 +680,25 @@ export function GraphCanvas({
               <span />
               <span />
             </div>
-            <strong>Loading graph…</strong>
-            <p>We are collecting resource relationships and preparing the layout.</p>
+            <strong>{t("graphCanvas.loadingTitle")}</strong>
+            <p>{t("graphCanvas.loadingDescription")}</p>
           </div>
         </div>
       ) : null}
 
       {showSubtleLoading ? (
         <div className="graph-overlay graph-overlay--subtle">
-          <strong>Updating graph…</strong>
+          <strong>{t("graphCanvas.updating")}</strong>
         </div>
       ) : null}
 
       {errorMessage ? (
         <div className="graph-overlay">
           <div className="graph-state-card">
-            <strong>Graph unavailable</strong>
+            <strong>{t("graphCanvas.unavailableTitle")}</strong>
             <p>{errorMessage}</p>
             <button className="app-button" onClick={onRetry}>
-              Retry
+              {t("common.retry")}
             </button>
           </div>
         </div>
